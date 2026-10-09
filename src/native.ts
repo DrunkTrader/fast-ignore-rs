@@ -3,7 +3,7 @@ import {createRequire} from 'node:module';
 type NativeMatcher = {
   readonly empty: boolean,
   matches: (relativePath: string, isDirectory: boolean) => boolean,
-  matchesBatch: (relativePaths: string[], directories?: boolean[]) => boolean[]
+  matchesBatch: (relativePaths: string[], directories?: boolean[], defaultDirectory?: boolean) => boolean[]
 };
 
 type NativeModule = {
@@ -19,3 +19,4 @@ const createNativeMatcher = (ignores: string[], caseSensitive: boolean): NativeM
 };
 
 export {createNativeMatcher};
+export type {NativeMatcher};

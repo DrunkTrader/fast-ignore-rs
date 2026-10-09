@@ -151,12 +151,6 @@ impl Engine {
                         &mut negative,
                     );
                 }
-                if strength >= 0 && !negative {
-                    return true;
-                }
-                if self.scratch.is_empty() {
-                    return false;
-                }
                 if nth == self.cache.len() {
                     self.cache.push(Cache::default());
                 }
@@ -237,7 +231,7 @@ mod tests {
         assert!(matches(&mut engine(&["foo", "!foo"]), "foo", false));
         assert!(!matches(&mut engine(&["foo\n!foo"]), "foo", false));
         assert!(matches(&mut engine(&["foo\n!foo", "foo"]), "foo", false));
-        assert!(matches(&mut engine(&["foo\n!foo/"]), "foo", false) == false);
+        assert!(!matches(&mut engine(&["foo\n!foo/"]), "foo", false));
         assert!(matches(&mut engine(&["foo/\nfoo"]), "foo", false));
         // Different trie branches can override across tiers (an upstream quirk).
         assert!(!matches(&mut engine(&["*.js", "!foo.js"]), "foo.js", false));

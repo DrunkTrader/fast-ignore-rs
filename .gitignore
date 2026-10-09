@@ -36,3 +36,4 @@ pnpm-debug.log*
 /*.node
 /fast-ignore-rs-loader.cjs
 /*.tgz
+/audit

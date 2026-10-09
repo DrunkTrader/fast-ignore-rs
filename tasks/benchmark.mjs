@@ -91,6 +91,27 @@ const individual = (factory, ignores, paths, directories = undefined) => {
   return paths.map ( (path, index) => matcher ( path, {isDirectory: directories?.[index] ?? false} ) );
 };
 
+const assertStatefulParity = (scenario, original, native) => {
+  const inputs = scenario.paths.map ( (path, index) => ({path, isDirectory: scenario.directories?.[index] ?? false}) );
+  const sequences = [inputs, [...inputs].reverse (), [...inputs, ...inputs]];
+  const originalMatcher = original ( scenario.ignores );
+  const nativeMatcher = native ( scenario.ignores );
+
+  for ( const sequence of sequences ) {
+    const expected = sequence.map ( input => originalMatcher ( input.path, {isDirectory: input.isDirectory} ) );
+    const actual = sequence.map ( input => nativeMatcher ( input.path, {isDirectory: input.isDirectory} ) );
+    assert.deepEqual ( actual, expected, `Stateful mismatch in ${scenario.name}` );
+
+    const paths = sequence.map ( input => input.path );
+    const directories = scenario.directories === undefined ? undefined : sequence.map ( input => input.isDirectory );
+    assert.deepEqual (
+      nativeMatcher.batch ( paths, {isDirectory: directories} ),
+      expected,
+      `Stateful batch mismatch in ${scenario.name}`
+    );
+  }
+};
+
 const assertParity = (scenario, original, native) => {
   const originalResults = individual ( original, scenario.ignores, scenario.paths, scenario.directories );
   const nativeResults = individual ( native, scenario.ignores, scenario.paths, scenario.directories );
@@ -104,6 +125,7 @@ const assertParity = (scenario, original, native) => {
   if ( JSON.stringify ( nativeResults ) !== JSON.stringify ( batchResults ) ) {
     throw new Error ( `Batch correctness mismatch in ${scenario.name}` );
   }
+  assertStatefulParity ( scenario, original, native );
   return originalResults.reduce ( (sum, value) => sum + Number ( value ), 0 );
 };
 

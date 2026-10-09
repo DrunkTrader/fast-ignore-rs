@@ -1,5 +1,11 @@
 use regress::Regex;
-use std::{collections::BTreeMap, sync::OnceLock};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::{Mutex, OnceLock},
+};
+
+const MAX_CLASS_CACHE_ENTRIES: usize = 128;
+const MAX_CLASS_CACHE_SOURCE: usize = 256;
 
 // Legacy (non-/u) ECMAScript Canonicalize: uppercase only when the result is a
 // single UTF-16 unit, and never fold a non-ASCII unit into ASCII.
@@ -50,8 +56,33 @@ pub fn literal(c: u16, out: &mut Vec<u16>) {
 }
 
 pub fn class(source: Vec<u16>) -> Result<Vec<u16>, String> {
+    static CACHE: OnceLock<Mutex<HashMap<Vec<u16>, Vec<u16>>>> = OnceLock::new();
+
+    if source.len() <= MAX_CLASS_CACHE_SOURCE {
+        let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Ok(cache) = cache.lock() {
+            if let Some(expanded) = cache.get(&source) {
+                return Ok(expanded.clone());
+            }
+        }
+    }
+
+    let expanded = expand_class(&source)?;
+    if source.len() <= MAX_CLASS_CACHE_SOURCE {
+        let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+        if let Ok(mut cache) = cache.lock() {
+            if cache.len() >= MAX_CLASS_CACHE_ENTRIES {
+                cache.clear();
+            }
+            cache.insert(source, expanded.clone());
+        }
+    }
+    Ok(expanded)
+}
+
+fn expand_class(source: &[u16]) -> Result<Vec<u16>, String> {
     let negated = source.get(1) == Some(&94);
-    let mut positive = source.clone();
+    let mut positive = source.to_vec();
     if negated {
         positive.remove(1);
     }
@@ -69,7 +100,7 @@ pub fn class(source: Vec<u16>) -> Result<Vec<u16>, String> {
         }
     }
     if extra.is_empty() {
-        return Ok(source);
+        return Ok(source.to_vec());
     }
     if negated {
         let mut out: Vec<u16> = "(?![".encode_utf16().collect();

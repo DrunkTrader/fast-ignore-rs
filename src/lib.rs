@@ -61,6 +61,7 @@ mod bindings {
             &mut self,
             paths: Vec<JsString>,
             directories: Option<Vec<bool>>,
+            default_directory: Option<bool>,
         ) -> Result<Vec<bool>> {
             paths
                 .iter()
@@ -73,7 +74,7 @@ mod bindings {
                             .as_ref()
                             .and_then(|d| d.get(i))
                             .copied()
-                            .unwrap_or(false),
+                            .unwrap_or(default_directory.unwrap_or(false)),
                     ))
                 })
                 .collect()

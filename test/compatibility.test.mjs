@@ -38,6 +38,27 @@ test('seeded multi-rule/tier differential coverage and prefix-cache invalidation
   }
 });
 
+test('prefix cache remains valid after terminal and empty-state early exits', () => {
+  const patterns = '/a/b/c/d\n/x/e';
+  const paths = ['a/b/c/q', 'x/e', 'x/b/c/d'];
+  const expected = [false, true, false];
+
+  for (const factory of [original, fastIgnore]) {
+    const matcher = factory(patterns);
+    assert.deepEqual(paths.map(path => matcher(path)), expected);
+  }
+});
+
+test('empty and invalid matchers preserve option evaluation order', () => {
+  let reads = 0;
+  const options = {get caseSensitive() { reads++; throw new Error('should not be read'); }};
+  const matcher = fastIgnore('', options);
+
+  assert.equal(matcher('anything'), false);
+  assert.equal(reads, 0);
+  assert.equal(outcome(() => fastIgnore('a\u2028b', null)).error, 'TypeError');
+});
+
 test('invalid typed inputs throw synchronously; empty matchers retain short circuit', () => {
   for (const invalid of [undefined, null, 1, {}, [null], ['foo', 2]]) {
     assert.deepEqual(outcome(() => fastIgnore(invalid)), outcome(() => original(invalid)));

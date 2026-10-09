@@ -1,6 +1,6 @@
 {
   "name": "fast-ignore-rs",
-  "repository": "github:fabiospampinato/fast-ignore",
+  "repository": "github:DrunkTrader/fast-ignore-rs",
   "description": "A Rust-powered fast parser and processor for .gitignore files.",
   "license": "MIT",
   "version": "0.1.0",

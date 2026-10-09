@@ -76,25 +76,25 @@ and Rust batch results matched Rust individual results.
 
 Key results from the latest run:
 
-- Individual matching was **4.46× faster** with many patterns and **2.31×
-  faster** with long paths. Short individual calls remained slower because of
-  the native-call boundary.
-- Batch matching was **5.12× faster** with many patterns, **2.79× faster** with
+- Individual matching was **4.48× faster** with many patterns, **2.32× faster**
+  with long paths, and **1.06× faster** with recursive classes and negation.
+  Short individual calls remained slower because of the native-call boundary.
+- Batch matching was **5.31× faster** with many patterns, **2.98× faster** with
   long paths, and faster on the small, large, and recursive workloads.
-- Rust matcher creation was **21–36% faster** for most workloads, with the
-  recursive/class workload as the exception: **169.522 µs** in Rust versus
-  **19.328 µs** in the original implementation.
+- Rust matcher creation was **19–35% faster** for most workloads. Recursive/class
+  creation improved substantially but remained **31.7% slower**: **24.733 µs** in
+  Rust versus **18.786 µs** in the original implementation.
 
 ### Individual matching throughput
 
 | Scenario | Workload | Original | Rust | Rust / original | Throughput change |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Small patterns | 4 patterns, 32 paths | 2,351,827 paths/s | 1,871,408 paths/s | 0.80× | **−20.4%** |
-| Large path set | 5 patterns, 10,000 paths | 2,195,995 paths/s | 1,828,747 paths/s | 0.83× | **−16.7%** |
-| Many patterns | 161 patterns, 3,000 paths | 118,839 paths/s | 530,126 paths/s | 4.46× | **+346.1%** |
-| Directory rules and negation | 4 patterns, 7 paths | 2,975,597 paths/s | 1,864,207 paths/s | 0.63× | **−37.4%** |
-| Long paths | 5 patterns, 10,000 paths | 460,082 paths/s | 1,063,479 paths/s | 2.31× | **+131.1%** |
-| Recursive classes and negation | 5 patterns, 3,000 paths | 1,634,113 paths/s | 1,612,613 paths/s | 0.99× | **−1.3%** |
+| Small patterns | 4 patterns, 32 paths | 2,423,760 paths/s | 1,873,027 paths/s | 0.77× | **−22.7%** |
+| Large path set | 5 patterns, 10,000 paths | 2,201,509 paths/s | 1,882,455 paths/s | 0.86× | **−14.5%** |
+| Many patterns | 161 patterns, 3,000 paths | 115,028 paths/s | 515,413 paths/s | 4.48× | **+348.1%** |
+| Directory rules and negation | 4 patterns, 7 paths | 2,927,429 paths/s | 1,948,558 paths/s | 0.67× | **−33.4%** |
+| Long paths | 5 patterns, 10,000 paths | 464,282 paths/s | 1,077,232 paths/s | 2.32× | **+132.0%** |
+| Recursive classes and negation | 5 patterns, 3,000 paths | 1,589,712 paths/s | 1,691,703 paths/s | 1.06× | **+6.4%** |
 
 Throughput is calculated as `Rust throughput / original throughput`. Negative
 values indicate that Rust processed fewer paths per second for that workload.
@@ -107,12 +107,12 @@ paths.
 
 | Scenario | Original creation | Rust creation | Creation change | Original matching | Rust matching | Latency improvement |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Small patterns | 12.700 µs | 9.654 µs | **+24.0%** | 136.064 ms | 170.994 ms | **−25.7%** |
-| Large path set | 15.807 µs | 12.444 µs | **+21.3%** | 95.629 ms | 114.833 ms | **−20.1%** |
-| Many patterns | 558.529 µs | 359.490 µs | **+35.6%** | 100.977 ms | 22.636 ms | **+77.6%** |
-| Directory rules and negation | 12.743 µs | 10.597 µs | **+16.8%** | 70.574 ms | 112.648 ms | **−59.6%** |
-| Long paths | 15.845 µs | 11.937 µs | **+24.7%** | 173.882 ms | 75.225 ms | **+56.7%** |
-| Recursive classes and negation | 19.328 µs | 169.522 µs | **−777.1%** | 99.136 ms | 100.458 ms | **−1.3%** |
+| Small patterns | 12.479 µs | 10.100 µs | **+19.1%** | 105.621 ms | 136.677 ms | **−29.4%** |
+| Large path set | 16.236 µs | 12.838 µs | **+20.9%** | 109.016 ms | 127.493 ms | **−16.9%** |
+| Many patterns | 553.477 µs | 361.166 µs | **+34.7%** | 104.322 ms | 23.282 ms | **+77.7%** |
+| Directory rules and negation | 12.920 µs | 11.141 µs | **+13.8%** | 71.735 ms | 107.772 ms | **−50.2%** |
+| Long paths | 16.113 µs | 12.748 µs | **+20.9%** | 172.309 ms | 74.264 ms | **+56.9%** |
+| Recursive classes and negation | 18.786 µs | 24.733 µs | **−31.7%** | 94.357 ms | 88.668 ms | **+6.0%** |
 
 Latency improvement is calculated as
 `(original latency − Rust latency) / original latency × 100`. Creation change
@@ -129,12 +129,12 @@ flags.
 
 | Scenario | Original JS loop | Rust batch | Rust / original | Change |
 | --- | ---: | ---: | ---: | ---: |
-| Small patterns | 2,381,041 paths/s | 2,586,273 paths/s | 1.09× | **+8.6%** |
-| Large path set | 2,214,740 paths/s | 2,708,753 paths/s | 1.22× | **+22.3%** |
-| Many patterns | 120,820 paths/s | 618,478 paths/s | 5.12× | **+411.9%** |
-| Directory rules and negation | 2,865,712 paths/s | 1,863,917 paths/s | 0.65× | −35.0% |
-| Long paths | 472,107 paths/s | 1,314,927 paths/s | 2.79× | **+178.5%** |
-| Recursive classes and negation | 1,625,933 paths/s | 2,314,090 paths/s | 1.42× | **+42.3%** |
+| Small patterns | 2,405,033 paths/s | 2,630,896 paths/s | 1.09× | **+9.4%** |
+| Large path set | 2,231,343 paths/s | 2,766,267 paths/s | 1.24× | **+24.0%** |
+| Many patterns | 116,326 paths/s | 617,254 paths/s | 5.31× | **+430.6%** |
+| Directory rules and negation | 2,986,245 paths/s | 1,888,032 paths/s | 0.63× | −36.8% |
+| Long paths | 462,825 paths/s | 1,378,971 paths/s | 2.98× | **+197.9%** |
+| Recursive classes and negation | 1,627,901 paths/s | 2,366,321 paths/s | 1.45× | **+45.4%** |
 
 ### Environment and methodology
 
@@ -145,7 +145,7 @@ flags.
 - native addon built with `napi build --platform --release`;
 - seven measured samples per metric after two full warm-up runs;
 - matching passes were selected per scenario to make the slowest implementation
-  run for approximately 100 ms per sample: 10,000, 21, 4, 30, 8, and 54
+  run for approximately 100 ms per sample: 8,000, 24, 4, 30, 8, and 50
   passes respectively for the rows above;
 - matcher creation was also sampled for a duration sufficient to reduce timer
   noise and reported as median microseconds per matcher;
@@ -157,13 +157,13 @@ flags.
 - memory usage was not measured reliably and is omitted.
 
 These measurements show workload-dependent behavior. Reusing a UTF-16 buffer
-for individual calls and processing batch paths as NAPI strings improved the
-native batch path substantially. The native boundary still makes short
-individual calls slower than direct JavaScript calls, while Rust is faster for
-many patterns, long paths, and most batch workloads. Recursive/class matching
-has a large Rust matcher-creation cost despite similar steady-state individual
-latency. Matcher reuse, pattern complexity, path length, and the ratio of
-compilation to matching work materially affect the result.
+for individual calls, passing scalar batch directory flags without expanding
+them in JavaScript, and memoizing repeated case-folded classes improved the
+native path. The native boundary still makes short individual calls slower than
+direct JavaScript calls, while Rust is faster for many patterns, long paths,
+recursive/class matching, and most batch workloads. Matcher reuse, pattern
+complexity, path length, and the ratio of compilation to matching work materially
+affect the result.
 
 ## Matching behavior
 
@@ -183,7 +183,9 @@ This is intentionally the original `fast-ignore` grammar and trie behavior rathe
 
 ## Development
 
-Requirements for building from source are Node.js 18+, npm, Rust, and Cargo.
+Runtime support is declared for Node.js 18+. Building from source currently
+requires Node.js 20.17+ because of the locked NAPI-RS CLI toolchain, plus npm,
+Rust, and Cargo.
 
 ```sh
 npm install

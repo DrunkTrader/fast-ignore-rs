@@ -91,5 +91,12 @@ test ( 'the batch method has the same results as individual calls', () => {
 
   assert.deepEqual ( ignore.batch ( paths, {isDirectory: directories} ), expected );
   assert.deepEqual ( ignore.batch ( paths, {isDirectory: false} ), paths.map ( path => ignore ( path ) ) );
+  assert.deepEqual ( ignore.batch ( ['build'], {isDirectory: true} ), [true] );
+
+  assert.throws ( () => ignore.batch ( ['build'], {isDirectory: [1]} ), TypeError );
+  assert.throws ( () => ignore.batch ( ['build'], {isDirectory: 1} ), TypeError );
+  assert.throws ( () => ignore.batch ( new Array ( 1 ) ), TypeError );
+
+  assert.deepEqual ( fastIgnore ( '' ).batch ( ['anything'] ), [false] );
 
 });
