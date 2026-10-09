@@ -1,9 +1,12 @@
 {
   "name": "fast-ignore-rs",
-  "repository": "github:DrunkTrader/fast-ignore-rs",
+  "version": "0.1.1",
   "description": "A Rust-powered fast parser and processor for .gitignore files.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DrunkTrader/fast-ignore-rs.git"
+  },
   "license": "MIT",
-  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -29,16 +32,14 @@
   },
   "scripts": {
     "build": "npm run build:native && npm run build:ts",
-    "build:native": "napi build --platform --release --output-dir native-build && node tasks/copy-native.mjs",
+    "build:native": "napi build --platform --release --output-dir native-build -- --locked && node tasks/copy-native.mjs",
     "build:ts": "tsc --project tsconfig.json",
     "clean": "node tasks/clean.mjs",
-    "test": "npm run build && npm run test:rust && npm run typecheck && node --test test/index.test.mjs test/upstream.test.mjs test/compatibility.test.mjs",
+    "test": "npm run build && npm run test:rust && npm run typecheck && node --test test/index.test.mjs test/upstream.test.mjs test/compatibility.test.mjs test/release.test.mjs",
     "typecheck": "tsc --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --strict --skipLibCheck test/types.test.ts",
-    "test:rust": "cargo test",
+    "test:rust": "cargo test --locked",
     "benchmark": "npm run build && node --expose-gc tasks/benchmark.mjs",
-    "benchmark:prepare": "npm install --ignore-scripts",
-    "prepublishOnly": "npm run build",
-    "release:prepare": "npm run build && napi prepublish -t npm"
+    "benchmark:prepare": "npm install --ignore-scripts"
   },
   "keywords": [
     "fast",
