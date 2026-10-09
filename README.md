@@ -8,7 +8,7 @@
 npm install fast-ignore-rs
 ```
 
-Each npm artifact includes the target-specific native addon produced by NAPI-RS, so consumers do not need Rust installed. A multi-platform release should collect the `.node` artifacts from the CI runners before packing the root package.
+The release pipeline for `0.1.1` assembles one npm tarball with native addons for Linux x64/ARM64 (GNU libc and Alpine musl), macOS Intel/Apple Silicon, and Windows x64 MSVC. Consumers do not need Rust installed. Node.js 18+ is supported; CI checks the installed tarball on Node.js 18, 20, 22, 24, and 26.
 
 ## Usage
 
@@ -183,26 +183,20 @@ This is intentionally the original `fast-ignore` grammar and trie behavior rathe
 
 ## Development
 
-Runtime support is declared for Node.js 18+. Building from source currently
-requires Node.js 20.17+ because of the locked NAPI-RS CLI toolchain, plus npm,
-Rust, and Cargo.
+Runtime support is declared for Node.js 18+. For building from source, use
+Node.js 22.20+ on the 22.x line (or Node.js 24.12+ on the 24.x line), npm,
+stable Rust, and Cargo. The locked development toolchain has newer Node.js
+requirements than the installed package.
 
 ```sh
-npm install
+npm ci
 npm test
 npm run build
 ```
 
-`npm run build` compiles the Rust NAPI addon in release mode and then emits the JavaScript entry point and TypeScript declarations. The addon is written to the package root as a target-specific `.node` file. The generated NAPI-RS loader also supports the corresponding optional-dependency layout when platform packages are assembled for a release.
+`npm run build` compiles the Rust NAPI addon in release mode using `Cargo.lock` and then emits the JavaScript entry point and TypeScript declarations. `tasks/copy-native.mjs` copies the target-specific `.node` file and generated CommonJS loader to the package root. The ESM wrapper loads that loader, which selects a bundled binary by OS, architecture, and libc.
 
-To prepare platform-specific npm artifacts, run:
-
-```sh
-npm run release:prepare
-npm pack
-```
-
-The CI workflow builds and tests on Linux, macOS, and Windows runners. This development environment verified Linux arm64 with glibc; other targets require their corresponding CI runner or a NAPI-RS cross-build environment.
+See [RELEASING.md](./RELEASING.md) for the seven-target build matrix, installed-tarball checks, and one-time npm Trusted Publishing setup. Pull requests and branch pushes validate builds; pushes to `main` and version tags also assemble and test the package. Only matching version-tag pushes can publish the tested tarball. A local `npm pack --ignore-scripts` contains only the binaries already present locally and is not a complete multi-platform release.
 
 ## Reproducing benchmarks
 

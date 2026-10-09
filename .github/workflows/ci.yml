@@ -2,27 +2,286 @@ name: CI
 
 on:
   push:
+    branches: ['**']
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
+  validate:
+    name: Validate release configuration
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test test/release.test.mjs
+      - name: Check release tag before building
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node tasks/release.mjs tag
+
   build-and-test:
-    name: ${{ matrix.os }}
+    name: test (${{ matrix.target }})
+    needs: validate
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.rust-target }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64-gnu
+            rust-target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: linux-arm64-gnu
+            rust-target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: darwin-x64
+            rust-target: x86_64-apple-darwin
+          - os: macos-15
+            target: darwin-arm64
+            rust-target: aarch64-apple-darwin
+          - os: windows-2022
+            target: win32-x64-msvc
+            rust-target: x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy,rustfmt
+          targets: ${{ matrix.rust-target }}
+
       - run: npm ci
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: npm test
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - run: npm run test:rust
+
+      # Native CPU runners, with NAPI-RS's supported older-glibc linker/sysroot.
+      - name: Build GNU Linux release addon
+        if: runner.os == 'Linux'
+        run: |
+          npm exec -- napi build --platform --release --output-dir native-build --target "$CARGO_BUILD_TARGET" --use-napi-cross -- --locked
+          node tasks/copy-native.mjs
+          npm run build:ts
+      - name: Build macOS or Windows release addon
+        if: runner.os != 'Linux'
+        run: npm run build
+      - run: npm run typecheck
+      - run: node --test test/index.test.mjs test/upstream.test.mjs test/compatibility.test.mjs
+      - name: Verify target, binary header, and libc
+        run: node tasks/release.mjs native ${{ matrix.target }}
+
+      - name: Upload native addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: fast-ignore-rs.${{ matrix.target }}.node
+          if-no-files-found: error
+          retention-days: 14
+
+  build-musl:
+    name: test (${{ matrix.target }}, Alpine)
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64-musl
+            rust-target: x86_64-unknown-linux-musl
+            docker-platform: linux/amd64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64-musl
+            rust-target: aarch64-unknown-linux-musl
+            docker-platform: linux/arm64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      # Actions run on the Ubuntu host; Rust, npm ci, and all source tests run
+      # in Alpine. No QEMU or glibc compatibility layer is involved.
+      - name: Build and test natively in Alpine
+        env:
+          DOCKER_PLATFORM: ${{ matrix.docker-platform }}
+          CARGO_BUILD_TARGET: ${{ matrix.rust-target }}
+          NATIVE_TARGET: ${{ matrix.target }}
+        run: |
+          docker run --rm --platform "$DOCKER_PLATFORM" \
+            -v "$GITHUB_WORKSPACE:/work" -w /work \
+            -e CARGO_BUILD_TARGET -e NATIVE_TARGET \
+            node:22-alpine3.21 sh tasks/build-alpine.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: fast-ignore-rs.${{ matrix.target }}.node
+          if-no-files-found: error
+          retention-days: 14
+
+  package:
+    name: Assemble npm package
+    needs: [build-and-test, build-musl]
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    outputs:
+      filename: ${{ steps.pack.outputs.filename }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Remove local-only native binary
+        run: rm -f fast-ignore-rs.*.node
+
+      - name: Collect native addons
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          # Never merge before validation: duplicate filenames could overwrite.
+          path: native-artifacts
+
+      - name: Verify all native addons
+        run: node tasks/release.mjs collect native-artifacts
+
+      - name: Inspect dry-run, pack, and verify actual tarball
+        id: pack
+        run: node tasks/release.mjs pack
+
+      - name: Upload assembled package
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ steps.pack.outputs.filename }}
+          if-no-files-found: error
+          retention-days: 14
+
+  test-packaged:
+    name: Test package (${{ matrix.platform.target }}, Node ${{ matrix.node }})
+    needs: package
+    runs-on: ${{ matrix.platform.os }}
+    env:
+      RELEASE_SHA256: ${{ needs.package.outputs.sha256 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 20, 22, 24, 26]
+        platform:
+          - os: ubuntu-22.04
+            target: linux-x64-gnu
+          - os: ubuntu-22.04-arm
+            target: linux-arm64-gnu
+          - os: macos-15-intel
+            target: darwin-x64
+          - os: macos-15
+            target: darwin-arm64
+          - os: windows-2022
+            target: win32-x64-msvc
+          - os: ubuntu-24.04
+            target: linux-x64-musl
+            docker-platform: linux/amd64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64-musl
+            docker-platform: linux/arm64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: ${{ !matrix.platform.docker-platform }}
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Download assembled package
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: dist-package
+
+      - name: Install exact tarball and exercise public API
+        if: ${{ !matrix.platform.docker-platform }}
+        run: node tasks/test-package.mjs dist-package ${{ matrix.platform.target }}
+
+      - name: Install and exercise public API in Alpine
+        if: ${{ matrix.platform.docker-platform }}
+        env:
+          DOCKER_PLATFORM: ${{ matrix.platform.docker-platform }}
+          NODE_VERSION: ${{ matrix.node }}
+          NATIVE_TARGET: ${{ matrix.platform.target }}
+        run: |
+          docker run --rm --platform "$DOCKER_PLATFORM" \
+            -v "$GITHUB_WORKSPACE:/work:ro" -w /work -e RELEASE_SHA256 \
+            "node:${NODE_VERSION}-alpine" \
+            node tasks/test-package.mjs dist-package "$NATIVE_TARGET"
+
+  publish:
+    name: Publish tested tarball to npm (OIDC)
+    needs: [package, test-packaged]
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'DrunkTrader/fast-ignore-rs' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      needs.package.result == 'success' && needs.test-packaged.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_SHA256: ${{ needs.package.outputs.sha256 }}
+      RELEASE_FILENAME: ${{ needs.package.outputs.filename }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Install OIDC-capable npm CLI
+        run: npm install --global npm@11.6.2 --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: dist-package
+      - name: Verify tag, checksum, packed metadata, and runtime files
+        run: |
+          node tasks/release.mjs tag
+          node tasks/release.mjs artifact dist-package
+      - name: Publish the tested artifact
+        run: npm publish "dist-package/$RELEASE_FILENAME" --access public --provenance --ignore-scripts
