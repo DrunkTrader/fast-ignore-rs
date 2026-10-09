@@ -284,4 +284,4 @@ jobs:
           node tasks/release.mjs tag
           node tasks/release.mjs artifact dist-package
       - name: Publish the tested artifact
-        run: npm publish "dist-package/$RELEASE_FILENAME" --access public --provenance --ignore-scripts
+        run: npm publish "./dist-package/$RELEASE_FILENAME" --access public --provenance --ignore-scripts
