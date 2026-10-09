@@ -1,0 +1,21 @@
+[package]
+name = "fast-ignore-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Rust native matcher for fast-ignore"
+license = "MIT"
+repository = "https://github.com/fabiospampinato/fast-ignore"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi4"] }
+napi-derive = "3"
+regress = { version = "0.12", features = ["utf16"] }
+
+[build-dependencies]
+napi-build = "2"
+
+[dev-dependencies]
+ignore = "0.4"

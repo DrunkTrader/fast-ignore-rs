@@ -1,0 +1,16 @@
+src
+tasks
+test
+native-build
+target
+
+.env
+.env.*
+*.tgz
+
+.github
+Cargo.lock
+Cargo.toml
+
+.editorconfig
+tsconfig.json
